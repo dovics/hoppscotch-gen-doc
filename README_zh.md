@@ -7,12 +7,14 @@
 - 解析 Hoppscotch JSON 集合文件
 - 生成格式良好的 Markdown 文档
 - 支持多级文件夹结构
+- 执行 GET 请求并将实际响应包含在文档中
 - 支持：
   - 目录索引
   - HTTP 方法（带视觉徽章：🟢 GET、🟡 POST、🔴 DELETE）
   - 请求头
   - 查询参数
   - 请求体（格式化的 JSON）
+  - 响应数据（状态码、响应头、响应体）
   - 认证信息
   - 完整的描述支持
 
@@ -102,14 +104,29 @@ hoppscotch-gen-doc generate --help
 ### 生成文档
 
 ```bash
-# 生成到文件
+# 生成到文件（不执行请求）
 hoppscotch-gen-doc generate -i example.json -o API.md
+
+# 文档替换模式：替换文档中显示的服务器 URL
+hoppscotch-gen-doc generate -i example.json --server https://api.example.com -o API.md
+
+# 请求替换模式：只在执行请求时替换服务器 URL，文档中仍显示原始 URL
+hoppscotch-gen-doc generate -i example.json --target-server https://api.example.com -x -o API.md
+
+# 生成到文件并执行 GET 请求
+hoppscotch-gen-doc generate -i example.json -o API.md -x
+
+# 替换服务器地址并执行 GET 请求
+hoppscotch-gen-doc generate -i example.json --server https://api.example.com -x -o API.md
 
 # 输出到终端
 hoppscotch-gen-doc generate -i example.json
 
+# 使用自定义超时时间执行 GET 请求（默认：10 秒）
+hoppscotch-gen-doc generate -i example.json -x -t 30 -o API.md
+
 # 使用完整参数名
-hoppscotch-gen-doc generate --input example.json --output API.md
+hoppscotch-gen-doc generate --input example.json --output API.md --execute
 
 # 使用 make
 make generate
@@ -121,9 +138,15 @@ make generate
 |------|------|------|------|
 | `--input` | `-i` | Hoppscotch JSON 文件路径 | 是 |
 | `--output` | `-o` | 输出 Markdown 文件路径（可选，默认输出到 stdout） | 否 |
+| `--server` | | 只在文档中替换服务器 URL（请求仍发送到原始 URL） | 否 |
+| `--target-server` | | 只在执行请求时替换服务器 URL（文档中显示原始 URL） | 否 |
+| `--execute` | `-x` | 执行 GET 请求并将响应包含在文档中 | 否 |
+| `--timeout` | `-t` | 请求超时时间（秒，默认 10） | 否 |
 | `--help` | `-h` | 显示帮助信息 | 否 |
 
 ## 使用示例
+
+### 基础文档生成
 
 给定一个 Hoppscotch JSON 文件 `example.json`，运行：
 
@@ -144,6 +167,99 @@ hoppscotch-gen-doc generate -i example.json -o API.md
   - 查询参数表格
   - 请求体（格式化的 JSON）
   - 认证详情
+
+### 替换服务器地址
+
+工具支持两种服务器 URL 替换模式：
+
+#### 模式 1：文档替换（`--server`）
+
+只在文档中替换服务器 URL，请求仍发送到原始 URL：
+
+```bash
+hoppscotch-gen-doc generate -i example.json --server https://api.example.com -o API.md
+```
+
+**示例：**
+
+如果你的原始端点是：
+- `http://localhost:8080/api/v1/health`
+
+使用 `--server https://api.example.com` 后：
+- 文档中显示：`https://api.example.com/api/v1/health`
+- 请求发送到：`http://localhost:8080/api/v1/health`（原始 URL）
+
+这在以下场景中非常有用：
+- Hoppscotch 集合使用的是开发服务器 URL
+- 你想在文档中显示生产服务器 URL
+- 但请求仍然发送到开发服务器
+- 或结合 `--execute` 使用时，可以对不同服务器执行请求
+
+#### 模式 2：请求替换（`--target-server`）
+
+只在执行请求时替换服务器 URL，文档中保持原始 URL：
+
+```bash
+hoppscotch-gen-doc generate -i example.json --target-server https://api.example.com -x -o API.md
+```
+
+**示例：**
+
+如果你的原始端点是：
+- `http://localhost:8080/api/v1/health`
+
+使用 `--target-server https://api.example.com` 后：
+- 文档中显示：`http://localhost:8080/api/v1/health`（原始 URL）
+- 请求发送到：`https://api.example.com/api/v1/health`（替换后的 URL）
+
+这在以下场景中非常有用：
+- Hoppscotch 集合使用的是开发服务器 URL
+- 你想在文档中保留原始 URL
+- 但需要针对不同的服务器（如生产服务器）执行请求并获取响应
+- 你需要针对不同环境测试 API，而不改变文档内容
+
+### 执行 GET 请求
+
+要在文档中包含实际的 API 响应，使用 `--execute` 标志：
+
+```bash
+hoppscotch-gen-doc generate -i example.json -x -o API.md
+```
+
+这将执行所有 GET 请求并包含：
+
+- **响应状态码**：HTTP 状态码和消息
+- **响应头**：响应头表格
+- **响应体**：格式化的 JSON 或文本响应
+
+示例输出：
+
+```markdown
+### Health
+
+**🟢 GET**
+
+**Endpoint:** `https://api.example.com/health`
+
+#### Response
+
+**Status Code:** 200 200 OK
+
+**Response Headers:**
+
+| Key | Value |
+|-----|-------|
+| Content-Type | application/json |
+| Server | nginx |
+
+**Response Body:**
+
+```json
+{
+  "status": "healthy"
+}
+```
+```
 
 ## 项目结构
 
@@ -237,4 +353,4 @@ MIT License
 ## 使用的技术
 
 - [Cobra](https://github.com/spf13/cobra) - 强大的 Go CLI 应用程序框架
-- Go 标准库 - encoding/json, fmt, strings, os
+- Go 标准库 - encoding/json, fmt, strings, os, net/http
