@@ -260,6 +260,10 @@ func (g *MarkdownGenerator) writeRequest(req Request) {
 	if g.options.ServerURL != "" {
 		displayEndpoint = replaceEndpointHost(req.Endpoint, parseURL(g.options.ServerURL))
 	}
+	// Append query parameters to the endpoint URL if they exist
+	if len(req.Params) > 0 {
+		displayEndpoint = g.appendParamsToURL(displayEndpoint, req.Params)
+	}
 	fmt.Fprintf(&g.builder, "**Endpoint:** `%s`\n\n", displayEndpoint)
 
 	// Headers
@@ -330,6 +334,11 @@ func (g *MarkdownGenerator) writeResponse(req Request) {
 	requestEndpoint := req.Endpoint
 	if g.options.TargetServerURL != "" {
 		requestEndpoint = replaceEndpointHost(req.Endpoint, parseURL(g.options.TargetServerURL))
+	}
+
+	// Append query parameters to the request URL if they exist
+	if len(req.Params) > 0 {
+		requestEndpoint = g.appendParamsToURL(requestEndpoint, req.Params)
 	}
 
 	// Create HTTP request
@@ -448,4 +457,20 @@ func parseURL(urlStr string) *url.URL {
 		return &url.URL{}
 	}
 	return parsed
+}
+
+// appendParamsToURL appends query parameters to a URL
+func (g *MarkdownGenerator) appendParamsToURL(endpoint string, params []Param) string {
+	parsedURL, err := url.Parse(endpoint)
+	if err != nil {
+		return endpoint
+	}
+
+	query := parsedURL.Query()
+	for _, p := range params {
+		query.Set(p.Key, p.Value)
+	}
+	parsedURL.RawQuery = query.Encode()
+
+	return parsedURL.String()
 }
