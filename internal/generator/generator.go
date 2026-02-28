@@ -14,8 +14,9 @@ import (
 type Options struct {
 	ExecuteGET      bool
 	Timeout         int
-	ServerURL       string  // Replace in documentation
-	TargetServerURL string  // Replace only when executing requests
+	ServerURL       string           // Replace in documentation
+	TargetServerURL string           // Replace only when executing requests
+	Vars            map[string]string // Variable substitutions for <<var>> patterns
 }
 
 // HoppscotchCollection represents the root structure of a Hoppscotch collection
@@ -107,6 +108,19 @@ func Generate(data []byte, opts *Options) (string, error) {
 	if opts == nil {
 		opts = &Options{
 			Timeout: 10,
+			Vars:    make(map[string]string),
+		}
+	}
+
+	// Initialize Vars map if nil
+	if opts.Vars == nil {
+		opts.Vars = make(map[string]string)
+	}
+
+	// Merge collection variables (command-line vars take precedence)
+	for _, v := range collection.Variables {
+		if _, exists := opts.Vars[v.Key]; !exists {
+			opts.Vars[v.Key] = v.Value
 		}
 	}
 
@@ -120,6 +134,20 @@ func Generate(data []byte, opts *Options) (string, error) {
 	}
 
 	return gen.generate(), nil
+}
+
+// replaceVariables replaces <<var>> patterns with actual values
+func replaceVariables(input string, vars map[string]string) string {
+	if len(vars) == 0 {
+		return input
+	}
+
+	result := input
+	for key, value := range vars {
+		pattern := fmt.Sprintf("<<%s>>", key)
+		result = strings.ReplaceAll(result, pattern, value)
+	}
+	return result
 }
 
 // replaceEndpointHost replaces the host part of an endpoint URL
@@ -255,14 +283,27 @@ func (g *MarkdownGenerator) writeRequest(req Request) {
 	methodBadge := g.getMethodBadge(req.Method)
 	fmt.Fprintf(&g.builder, "%s\n\n", methodBadge)
 
+	// Replace variables in endpoint
+	endpoint := replaceVariables(req.Endpoint, g.options.Vars)
+
 	// Use replaced endpoint for documentation if --server is specified
-	displayEndpoint := req.Endpoint
+	displayEndpoint := endpoint
 	if g.options.ServerURL != "" {
-		displayEndpoint = replaceEndpointHost(req.Endpoint, parseURL(g.options.ServerURL))
+		displayEndpoint = replaceEndpointHost(endpoint, parseURL(g.options.ServerURL))
 	}
-	// Append query parameters to the endpoint URL if they exist
-	if len(req.Params) > 0 {
-		displayEndpoint = g.appendParamsToURL(displayEndpoint, req.Params)
+
+	// Replace variables in params and append to endpoint URL
+	displayParams := make([]Param, len(req.Params))
+	for i, p := range req.Params {
+		displayParams[i] = Param{
+			Key:   p.Key,
+			Value: replaceVariables(p.Value, g.options.Vars),
+			Desc:  p.Desc,
+		}
+	}
+
+	if len(displayParams) > 0 {
+		displayEndpoint = g.appendParamsToURL(displayEndpoint, displayParams)
 	}
 	fmt.Fprintf(&g.builder, "**Endpoint:** `%s`\n\n", displayEndpoint)
 
@@ -276,17 +317,18 @@ func (g *MarkdownGenerator) writeRequest(req Request) {
 			if desc == "" {
 				desc = "-"
 			}
-			fmt.Fprintf(&g.builder, "| %s | %s | %s |\n", h.Key, h.Value, desc)
+			value := replaceVariables(h.Value, g.options.Vars)
+			fmt.Fprintf(&g.builder, "| %s | %s | %s |\n", h.Key, value, desc)
 		}
 		g.builder.WriteString("\n")
 	}
 
 	// Query Parameters
-	if len(req.Params) > 0 {
+	if len(displayParams) > 0 {
 		g.builder.WriteString("#### Query Parameters\n\n")
 		g.builder.WriteString("| Key | Value | Description |\n")
 		g.builder.WriteString("|-----|-------|-------------|\n")
-		for _, p := range req.Params {
+		for _, p := range displayParams {
 			desc := p.Desc
 			if desc == "" {
 				desc = "-"
@@ -330,15 +372,27 @@ func (g *MarkdownGenerator) writeRequest(req Request) {
 func (g *MarkdownGenerator) writeResponse(req Request) {
 	g.builder.WriteString("#### Response\n\n")
 
+	// Replace variables in endpoint
+	endpoint := replaceVariables(req.Endpoint, g.options.Vars)
+
 	// Determine the actual endpoint to use for request
-	requestEndpoint := req.Endpoint
+	requestEndpoint := endpoint
 	if g.options.TargetServerURL != "" {
-		requestEndpoint = replaceEndpointHost(req.Endpoint, parseURL(g.options.TargetServerURL))
+		requestEndpoint = replaceEndpointHost(endpoint, parseURL(g.options.TargetServerURL))
 	}
 
-	// Append query parameters to the request URL if they exist
-	if len(req.Params) > 0 {
-		requestEndpoint = g.appendParamsToURL(requestEndpoint, req.Params)
+	// Replace variables in params and append to request URL
+	requestParams := make([]Param, len(req.Params))
+	for i, p := range req.Params {
+		requestParams[i] = Param{
+			Key:   p.Key,
+			Value: replaceVariables(p.Value, g.options.Vars),
+			Desc:  p.Desc,
+		}
+	}
+
+	if len(requestParams) > 0 {
+		requestEndpoint = g.appendParamsToURL(requestEndpoint, requestParams)
 	}
 
 	// Create HTTP request
@@ -350,7 +404,8 @@ func (g *MarkdownGenerator) writeResponse(req Request) {
 
 	// Add headers
 	for _, h := range req.Headers {
-		httpReq.Header.Set(h.Key, h.Value)
+		value := replaceVariables(h.Value, g.options.Vars)
+		httpReq.Header.Set(h.Key, value)
 	}
 
 	// Execute request

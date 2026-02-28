@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/dovics/hoppscotch-gen-doc/internal/generator"
@@ -15,6 +16,7 @@ var (
 	timeout         int
 	serverURL       string
 	targetServerURL string
+	varStrings      []string
 )
 
 var generateCmd = &cobra.Command{
@@ -34,6 +36,7 @@ func init() {
 	generateCmd.Flags().IntVarP(&timeout, "timeout", "t", 10, "Request timeout in seconds")
 	generateCmd.Flags().StringVar(&serverURL, "server", "", "Replace endpoint host in documentation (e.g., https://api.example.com)")
 	generateCmd.Flags().StringVar(&targetServerURL, "target-server", "", "Replace endpoint host only when executing requests (original URL shown in documentation)")
+	generateCmd.Flags().StringArrayVarP(&varStrings, "var", "v", []string{}, "Variable substitutions in format 'key=value' (can be used multiple times)")
 	generateCmd.MarkFlagRequired("input")
 }
 
@@ -44,12 +47,23 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("error reading input file: %w", err)
 	}
 
+	// Parse variable substitutions
+	vars := make(map[string]string)
+	for _, varStr := range varStrings {
+		parts := strings.SplitN(varStr, "=", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid variable format: %s (expected key=value)", varStr)
+		}
+		vars[parts[0]] = parts[1]
+	}
+
 	// Create options
 	opts := &generator.Options{
 		ExecuteGET:      executeGET,
 		Timeout:         timeout,
 		ServerURL:       serverURL,
 		TargetServerURL: targetServerURL,
+		Vars:            vars,
 	}
 
 	// Generate markdown

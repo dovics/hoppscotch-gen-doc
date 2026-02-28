@@ -8,6 +8,7 @@
 - 生成格式良好的 Markdown 文档
 - 支持多级文件夹结构
 - 执行 GET 请求并将实际响应包含在文档中
+- 支持变量替换（例如：`<<operator_endpoint>>`）
 - 支持：
   - 目录索引
   - HTTP 方法（带视觉徽章：🟢 GET、🟡 POST、🔴 DELETE）
@@ -128,6 +129,12 @@ hoppscotch-gen-doc generate -i example.json -x -t 30 -o API.md
 # 使用完整参数名
 hoppscotch-gen-doc generate --input example.json --output API.md --execute
 
+# 变量替换（替换 <<var>> 模式）
+hoppscotch-gen-doc generate -i example.json --var operator_endpoint=https://api.example.com --var api_key=abc123 -o API.md
+
+# 多个变量
+hoppscotch-gen-doc generate -i example.json -v host=https://api.example.com -v port=8080 -o API.md
+
 # 使用 make
 make generate
 ```
@@ -140,6 +147,7 @@ make generate
 | `--output` | `-o` | 输出 Markdown 文件路径（可选，默认输出到 stdout） | 否 |
 | `--server` | | 只在文档中替换服务器 URL（请求仍发送到原始 URL） | 否 |
 | `--target-server` | | 只在执行请求时替换服务器 URL（文档中显示原始 URL） | 否 |
+| `--var` | `-v` | 变量替换，格式为 `key=value`（可多次使用） | 否 |
 | `--execute` | `-x` | 执行 GET 请求并将响应包含在文档中 | 否 |
 | `--timeout` | `-t` | 请求超时时间（秒，默认 10） | 否 |
 | `--help` | `-h` | 显示帮助信息 | 否 |
@@ -217,6 +225,61 @@ hoppscotch-gen-doc generate -i example.json --target-server https://api.example.
 - 你想在文档中保留原始 URL
 - 但需要针对不同的服务器（如生产服务器）执行请求并获取响应
 - 你需要针对不同环境测试 API，而不改变文档内容
+
+### 变量替换
+
+使用 `--var` 标志替换集合中的变量。集合中的变量应使用 `<<变量名>>` 格式。
+
+**示例集合：**
+
+```json
+{
+  "name": "My API",
+  "variables": [
+    {
+      "key": "operator_endpoint",
+      "value": "http://localhost:8080"
+    }
+  ],
+  "requests": [
+    {
+      "name": "获取用户列表",
+      "method": "GET",
+      "endpoint": "<<operator_endpoint>>/api/v1/users"
+    }
+  ]
+}
+```
+
+**使用方法：**
+
+```bash
+# 从命令行覆盖变量值
+hoppscotch-gen-doc generate -i collection.json --var operator_endpoint=https://api.example.com -o API.md
+```
+
+**结果：**
+- 端点 `<<operator_endpoint>>/api/v1/users` 将被替换为 `https://api.example.com/api/v1/users`
+
+**多个变量：**
+
+```bash
+hoppscotch-gen-doc generate -i collection.json \
+  -v host=https://api.example.com \
+  -v port=8080 \
+  -v api_key=abc123 \
+  -o API.md
+```
+
+**变量来源：**
+1. 集合的 `variables` 字段中定义的变量（默认值）
+2. 通过 `--var` 标志传递的变量（会覆盖集合中的变量）
+
+变量会被替换到：
+- 端点 URL
+- 查询参数值
+- 请求头值
+- 请求执行（使用 `--execute` 时）
 
 ### 执行 GET 请求
 

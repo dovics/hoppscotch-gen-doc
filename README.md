@@ -8,6 +8,7 @@ A Go CLI tool that converts Hoppscotch JSON collections into Markdown API docume
 - Generates well-formatted Markdown documentation
 - Multi-level folder structure support
 - Execute GET requests and include actual responses in documentation
+- Variable substitution support (e.g., `<<operator_endpoint>>`)
 - Includes:
   - Table of Contents
   - HTTP methods with visual badges (🟢 GET, 🟡 POST, 🔴 DELETE)
@@ -129,6 +130,12 @@ hoppscotch-gen-doc generate -i example.json -x -t 30 -o API.md
 # Using long flag names
 hoppscotch-gen-doc generate --input example.json --output API.md --execute
 
+# Variable substitution (replace <<var>> patterns)
+hoppscotch-gen-doc generate -i example.json --var operator_endpoint=https://api.example.com --var api_key=abc123 -o API.md
+
+# Multiple variables
+hoppscotch-gen-doc generate -i example.json -v host=https://api.example.com -v port=8080 -o API.md
+
 # Using make
 make generate
 ```
@@ -141,6 +148,7 @@ make generate
 | `--output` | `-o` | Path to output Markdown file (optional, defaults to stdout) | No |
 | `--server` | | Replace endpoint host in documentation only (requests sent to original URL) | No |
 | `--target-server` | | Replace endpoint host only when executing requests (documentation shows original URL) | No |
+| `--var` | `-v` | Variable substitutions in format `key=value` (can be used multiple times) | No |
 | `--execute` | `-x` | Execute GET requests and include responses in documentation | No |
 | `--timeout` | `-t` | Request timeout in seconds (default: 10) | No |
 | `--help` | `-h` | Show help message | No |
@@ -220,6 +228,61 @@ This is useful when:
 - You want to generate documentation with the original URLs
 - But you need to execute requests against a different server (e.g., production)
 - You need to test APIs against different environments without changing the documentation
+
+### Variable Substitution
+
+Replace variables in your collection using the `--var` flag. Variables in your collection should use the format `<<variable_name>>`.
+
+**Example Collection:**
+
+```json
+{
+  "name": "My API",
+  "variables": [
+    {
+      "key": "operator_endpoint",
+      "value": "http://localhost:8080"
+    }
+  ],
+  "requests": [
+    {
+      "name": "Get Users",
+      "method": "GET",
+      "endpoint": "<<operator_endpoint>>/api/v1/users"
+    }
+  ]
+}
+```
+
+**Usage:**
+
+```bash
+# Override the variable value from command line
+hoppscotch-gen-doc generate -i collection.json --var operator_endpoint=https://api.example.com -o API.md
+```
+
+**Result:**
+- The endpoint `<<operator_endpoint>>/api/v1/users` will be replaced with `https://api.example.com/api/v1/v1/users`
+
+**Multiple Variables:**
+
+```bash
+hoppscotch-gen-doc generate -i collection.json \
+  -v host=https://api.example.com \
+  -v port=8080 \
+  -v api_key=abc123 \
+  -o API.md
+```
+
+**Variable Sources:**
+1. Variables defined in the collection's `variables` field (default values)
+2. Variables passed via `--var` flag (overrides collection variables)
+
+Variables are replaced in:
+- Endpoint URLs
+- Query parameter values
+- Header values
+- Request execution (when using `--execute`)
 
 ### Execute GET requests
 
